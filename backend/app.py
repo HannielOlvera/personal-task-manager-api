@@ -1,80 +1,113 @@
+import os
+import mysql.connector
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Simulación de base de datos en memoria (puedes cambiar por SQLite/MySQL)
-users = []
-tasks = []
-user_id_counter = 1
-task_id_counter = 1
+DB_CONFIG = {
+    "host": os.environ.get("DB_HOST"),
+    "user": os.environ.get("DB_USER"),
+    "password": os.environ.get("DB_PASS"),
+    "database": os.environ.get("DB_NAME"),
+    "port": int(os.environ.get("DB_PORT", 3306))
+}
+
+def get_db():
+    return mysql.connector.connect(**DB_CONFIG)
 
 @app.route("/register", methods=["POST"])
 def register():
-    global user_id_counter
     data = request.json
     if not data or "username" not in data or "password" not in data:
         return jsonify({"success": False, "error": "Missing fields"}), 400
-    if any(u["username"] == data["username"] for u in users):
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id FROM users WHERE username=%s", (data["username"],))
+    if cursor.fetchone():
+        cursor.close()
+        conn.close()
         return jsonify({"success": False, "error": "Username already exists"}), 400
-    users.append({"id": user_id_counter, "username": data["username"], "password": data["password"]})
-    user_id_counter += 1
+    cursor.execute("INSERT INTO users (username, password_hash) VALUES (%s, %s)", (data["username"], data["password"]))
+    conn.commit()
+    cursor.close()
+    conn.close()
     return jsonify({"success": True})
 
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
-    for u in users:
-        if u["username"] == data.get("username") and u["password"] == data.get("password"):
-            return jsonify({"success": True, "user_id": u["id"], "username": u["username"]})
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT id, username, password_hash FROM users WHERE username=%s", (data.get("username"),))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if user and user["password_hash"] == data.get("password"):
+        return jsonify({"success": True, "user_id": user["id"], "username": user["username"]})
     return jsonify({"success": False, "error": "Invalid credentials"}), 401
 
 @app.route("/tasks", methods=["GET"])
 def get_tasks():
     user_id = request.args.get("user_id", type=int)
-    user_tasks = [t for t in tasks if t["user_id"] == user_id]
-    return jsonify(user_tasks)
+    conn = get_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM tasks WHERE user_id=%s", (user_id,))
+    tasks = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify(tasks)
 
 @app.route("/tasks", methods=["POST"])
 def add_task():
-    global task_id_counter
     data = request.json
-    if not data or "user_id" not in data or "text" not in data or "last_modified_by" not in data:
-        return jsonify({"success": False, "error": "Missing fields"}), 400
-    task = {
-        "id": task_id_counter,
-        "user_id": data["user_id"],
-        "text": data["text"],
-        "completed": False,
-        "last_modified_by": data["last_modified_by"]
-    }
-    tasks.append(task)
-    task_id_counter += 1
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO tasks (user_id, text, last_modified_by) VALUES (%s, %s, %s)",
+        (data["user_id"], data["text"], data["last_modified_by"])
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
     return jsonify({"success": True})
 
 @app.route("/tasks/<int:task_id>", methods=["PUT"])
 def edit_task(task_id):
     data = request.json
-    for t in tasks:
-        if t["id"] == task_id:
-            t["text"] = data.get("text", t["text"])
-            t["last_modified_by"] = data.get("last_modified_by", t["last_modified_by"])
-            return jsonify({"success": True})
-    return jsonify({"success": False, "error": "Task not found"}), 404
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE tasks SET text=%s, last_modified_by=%s WHERE id=%s",
+        (data.get("text"), data.get("last_modified_by"), task_id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True})
 
 @app.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
-    global tasks
-    tasks = [t for t in tasks if t["id"] != task_id]
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM tasks WHERE id=%s", (task_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
     return jsonify({"success": True})
 
 @app.route("/tasks/<int:task_id>/complete", methods=["POST"])
 def complete_task(task_id):
-    for t in tasks:
-        if t["id"] == task_id:
-            t["completed"] = True
-            t["last_modified_by"] = request.json.get("last_modified_by", t["last_modified_by"])
-            return jsonify({"success": True})
-    return jsonify({"success": False, "error": "Task not found"}), 404
+    data = request.json
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE tasks SET completed=1, last_modified_by=%s WHERE id=%s",
+        (data.get("last_modified_by"), task_id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
