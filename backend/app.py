@@ -48,10 +48,9 @@ def login():
 
 @app.route("/tasks", methods=["GET"])
 def get_tasks():
-    user_id = request.args.get("user_id", type=int)
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, text, completed, last_modified_by, last_modified_at, created_at FROM tasks WHERE user_id=%s", (user_id,))
+    cursor.execute("SELECT id, text, completed, last_modified_by, last_modified_at, created_at, user_id FROM tasks")
     tasks = [
         {
             "id": row[0],
@@ -59,7 +58,8 @@ def get_tasks():
             "completed": row[2],
             "last_modified_by": row[3],
             "last_modified_at": row[4],
-            "created_at": row[5]
+            "created_at": row[5],
+            "user_id": row[6]
         }
         for row in cursor.fetchall()
     ]
