@@ -112,4 +112,13 @@ def complete_task(task_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE tasks SET completed=TRUE, last_modified_by=%s, last_modified_at=NOW() WHERE id=
+        "UPDATE tasks SET completed=TRUE, last_modified_by=%s, last_modified_at=NOW() WHERE id=%s",
+        (data.get("last_modified_by"), task_id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return jsonify({"success": True})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
