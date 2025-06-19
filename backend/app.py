@@ -91,20 +91,24 @@ def edit_task(task_id):
         "UPDATE tasks SET text=%s, last_modified_by=%s, last_modified_at=NOW() WHERE id=%s",
         (data.get("text"), data.get("last_modified_by"), task_id)
     )
+    updated = cursor.rowcount
     conn.commit()
     cursor.close()
     conn.close()
-    return jsonify({"success": True})
+    print(f"EDIT task_id={task_id}, updated={updated}")
+    return jsonify({"success": updated > 0})
 
 @app.route("/tasks/<int:task_id>", methods=["DELETE"])
 def delete_task(task_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM tasks WHERE id=%s", (task_id,))
+    deleted = cursor.rowcount
     conn.commit()
     cursor.close()
     conn.close()
-    return jsonify({"success": True})
+    print(f"DELETE task_id={task_id}, deleted={deleted}")
+    return jsonify({"success": deleted > 0})
 
 @app.route("/tasks/<int:task_id>/complete", methods=["POST"])
 def complete_task(task_id):
@@ -115,10 +119,12 @@ def complete_task(task_id):
         "UPDATE tasks SET completed=TRUE, last_modified_by=%s, last_modified_at=NOW() WHERE id=%s",
         (data.get("last_modified_by"), task_id)
     )
+    updated = cursor.rowcount
     conn.commit()
     cursor.close()
     conn.close()
-    return jsonify({"success": True})
+    print(f"COMPLETE task_id={task_id}, updated={updated}")
+    return jsonify({"success": updated > 0})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
